@@ -133,13 +133,22 @@ records = attendance.get_attendance_report("2024-01-15")
 
 ```
 face-recognition/
-├── face_recognition_system.py   # Main face recognition module
-├── register_faces_from_folder.py # Batch registration utility
+├── face_recognition_system.py    # Main face recognition module
 ├── attendance_system.py          # Attendance tracking system
+├── register_faces_from_folder.py # Batch registration utility
 ├── requirements.txt              # Python dependencies
 ├── README.md                     # This file
-├── face_encodings.pkl           # Face database (auto-generated)
-└── attendance.csv               # Attendance records (auto-generated)
+├── known_faces/                  # Folder for batch registration
+├── tests/                        # Unit tests
+│   └── test_face_recognition.py  # Test suite
+├── face_encodings.pkl            # Face database (auto-generated)
+└── attendance.csv                # Attendance records (auto-generated)
+```
+
+## Running Tests
+
+```bash
+python -m pytest tests/ -v
 ```
 
 ## Configuration

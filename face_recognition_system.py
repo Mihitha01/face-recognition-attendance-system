@@ -10,99 +10,172 @@ A complete face recognition system with the following features:
 
 import os
 import pickle
+import logging
+from pathlib import Path
+from typing import Optional, List, Tuple, Dict, Any
+
 import cv2
 import numpy as np
+import numpy.typing as npt
 import face_recognition
 from datetime import datetime
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 
 class FaceRecognitionSystem:
-    """Main class for face recognition operations."""
+    """Main class for face recognition operations.
     
-    def __init__(self, encodings_file="face_encodings.pkl"):
+    This class provides functionality to:
+    - Register faces from images or webcam
+    - Recognize faces in real-time or static images
+    - Manage a database of known face encodings
+    
+    Attributes:
+        encodings_file: Path to the pickle file storing face encodings
+        known_face_encodings: List of face encoding arrays
+        known_face_names: List of names corresponding to encodings
+    """
+    
+    SUPPORTED_IMAGE_FORMATS = ('.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp')
+    
+    def __init__(self, encodings_file: str = "face_encodings.pkl") -> None:
         """
         Initialize the face recognition system.
         
         Args:
             encodings_file: Path to save/load face encodings
         """
-        self.encodings_file = encodings_file
-        self.known_face_encodings = []
-        self.known_face_names = []
+        self.encodings_file = Path(encodings_file)
+        self.known_face_encodings: List[npt.NDArray[np.float64]] = []
+        self.known_face_names: List[str] = []
         self.load_encodings()
     
-    def load_encodings(self):
-        """Load saved face encodings from file."""
-        if os.path.exists(self.encodings_file):
-            with open(self.encodings_file, 'rb') as f:
-                data = pickle.load(f)
-                self.known_face_encodings = data.get('encodings', [])
-                self.known_face_names = data.get('names', [])
-            print(f"Loaded {len(self.known_face_names)} face(s) from database.")
+    def load_encodings(self) -> bool:
+        """Load saved face encodings from file.
+        
+        Returns:
+            bool: True if encodings were loaded successfully, False otherwise
+        """
+        if self.encodings_file.exists():
+            try:
+                with open(self.encodings_file, 'rb') as f:
+                    data = pickle.load(f)
+                    self.known_face_encodings = data.get('encodings', [])
+                    self.known_face_names = data.get('names', [])
+                logger.info(f"Loaded {len(self.known_face_names)} face(s) from database.")
+                return True
+            except (pickle.PickleError, EOFError, KeyError) as e:
+                logger.error(f"Error loading encodings: {e}")
+                self.known_face_encodings = []
+                self.known_face_names = []
+                return False
         else:
-            print("No existing face database found. Starting fresh.")
+            logger.info("No existing face database found. Starting fresh.")
+            return False
     
-    def save_encodings(self):
-        """Save face encodings to file."""
+    def save_encodings(self) -> bool:
+        """Save face encodings to file.
+        
+        Returns:
+            bool: True if saved successfully, False otherwise
+        """
         data = {
             'encodings': self.known_face_encodings,
-            'names': self.known_face_names
+            'names': self.known_face_names,
+            'version': '1.0',
+            'saved_at': datetime.now().isoformat()
         }
-        with open(self.encodings_file, 'wb') as f:
-            pickle.dump(data, f)
-        print(f"Saved {len(self.known_face_names)} face(s) to database.")
+        try:
+            # Ensure parent directory exists
+            self.encodings_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.encodings_file, 'wb') as f:
+                pickle.dump(data, f)
+            logger.info(f"Saved {len(self.known_face_names)} face(s) to database.")
+            return True
+        except (IOError, pickle.PickleError) as e:
+            logger.error(f"Error saving encodings: {e}")
+            return False
     
-    def register_face_from_image(self, image_path, name):
+    def register_face_from_image(self, image_path: str, name: str) -> bool:
         """
         Register a new face from an image file.
         
         Args:
             image_path: Path to the image file
-            name: Name of the person
+            name: Name of the person (will be stripped of whitespace)
             
         Returns:
             bool: True if registration successful, False otherwise
+            
+        Raises:
+            ValueError: If name is empty after stripping
         """
-        if not os.path.exists(image_path):
-            print(f"Error: Image file not found: {image_path}")
+        name = name.strip()
+        if not name:
+            logger.error("Name cannot be empty")
+            return False
+            
+        image_path = Path(image_path)
+        if not image_path.exists():
+            logger.error(f"Image file not found: {image_path}")
             return False
         
-        # Load and process the image
-        image = face_recognition.load_image_file(image_path)
-        face_encodings = face_recognition.face_encodings(image)
+        if not str(image_path).lower().endswith(self.SUPPORTED_IMAGE_FORMATS):
+            logger.warning(f"File may not be a supported image format: {image_path}")
         
-        if len(face_encodings) == 0:
-            print(f"Error: No face detected in {image_path}")
+        try:
+            # Load and process the image
+            image = face_recognition.load_image_file(str(image_path))
+            face_encodings = face_recognition.face_encodings(image)
+            
+            if len(face_encodings) == 0:
+                logger.error(f"No face detected in {image_path}")
+                return False
+            
+            if len(face_encodings) > 1:
+                logger.warning(f"Multiple faces detected ({len(face_encodings)}). Using the first face.")
+            
+            # Add the encoding
+            self.known_face_encodings.append(face_encodings[0])
+            self.known_face_names.append(name)
+            self.save_encodings()
+            
+            logger.info(f"Successfully registered face for: {name}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error processing image {image_path}: {e}")
             return False
-        
-        if len(face_encodings) > 1:
-            print(f"Warning: Multiple faces detected. Using the first face.")
-        
-        # Add the encoding
-        self.known_face_encodings.append(face_encodings[0])
-        self.known_face_names.append(name)
-        self.save_encodings()
-        
-        print(f"Successfully registered face for: {name}")
-        return True
     
-    def register_face_from_webcam(self, name):
+    def register_face_from_webcam(self, name: str, camera_index: int = 0) -> bool:
         """
         Register a new face using the webcam.
         
         Args:
             name: Name of the person
+            camera_index: Index of the camera to use (default: 0)
             
         Returns:
             bool: True if registration successful, False otherwise
         """
-        cap = cv2.VideoCapture(0)
+        name = name.strip()
+        if not name:
+            logger.error("Name cannot be empty")
+            return False
+            
+        cap = cv2.VideoCapture(camera_index)
         
         if not cap.isOpened():
-            print("Error: Could not open webcam")
+            logger.error("Could not open webcam")
             return False
         
-        print("Press 'c' to capture face, 'q' to quit")
+        logger.info("Press 'c' to capture face, 'q' to quit")
         
         while True:
             ret, frame = cap.read()

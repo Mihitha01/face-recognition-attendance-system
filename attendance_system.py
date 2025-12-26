@@ -7,18 +7,32 @@ Records are saved to a CSV file with timestamps.
 
 import os
 import csv
+import logging
 from datetime import datetime
+from pathlib import Path
+from typing import Optional, List, Dict, Set, Any
+
 import cv2
 import face_recognition
 import numpy as np
 from face_recognition_system import FaceRecognitionSystem
 
+logger = logging.getLogger(__name__)
+
 
 class AttendanceSystem(FaceRecognitionSystem):
-    """Attendance system using face recognition."""
+    """Attendance system using face recognition.
     
-    def __init__(self, encodings_file="face_encodings.pkl", 
-                 attendance_file="attendance.csv"):
+    This class extends FaceRecognitionSystem to add attendance tracking
+    functionality. Attendance records are stored in a CSV file.
+    
+    Attributes:
+        attendance_file: Path to the CSV file for storing attendance records
+        today_attendance: Set of names who have marked attendance today
+    """
+    
+    def __init__(self, encodings_file: str = "face_encodings.pkl", 
+                 attendance_file: str = "attendance.csv") -> None:
         """
         Initialize the attendance system.
         
@@ -27,33 +41,40 @@ class AttendanceSystem(FaceRecognitionSystem):
             attendance_file: Path to attendance CSV file
         """
         super().__init__(encodings_file)
-        self.attendance_file = attendance_file
-        self.today_attendance = set()
+        self.attendance_file = Path(attendance_file)
+        self.today_attendance: Set[str] = set()
         self._load_today_attendance()
     
-    def _load_today_attendance(self):
+    def _load_today_attendance(self) -> None:
         """Load today's attendance from file."""
-        if not os.path.exists(self.attendance_file):
+        if not self.attendance_file.exists():
             return
         
         today = datetime.now().strftime("%Y-%m-%d")
         
-        with open(self.attendance_file, 'r', newline='') as f:
-            reader = csv.reader(f)
-            next(reader, None)  # Skip header
-            
-            for row in reader:
-                if len(row) >= 2 and row[1] == today:
-                    self.today_attendance.add(row[0])
+        try:
+            with open(self.attendance_file, 'r', newline='', encoding='utf-8') as f:
+                reader = csv.reader(f)
+                next(reader, None)  # Skip header
+                
+                for row in reader:
+                    if len(row) >= 2 and row[1] == today:
+                        self.today_attendance.add(row[0])
+        except (IOError, csv.Error) as e:
+            logger.error(f"Error loading today's attendance: {e}")
     
-    def _initialize_csv(self):
+    def _initialize_csv(self) -> None:
         """Initialize CSV file with headers if it doesn't exist."""
-        if not os.path.exists(self.attendance_file):
-            with open(self.attendance_file, 'w', newline='') as f:
-                writer = csv.writer(f)
-                writer.writerow(['Name', 'Date', 'Time', 'Status'])
+        if not self.attendance_file.exists():
+            try:
+                self.attendance_file.parent.mkdir(parents=True, exist_ok=True)
+                with open(self.attendance_file, 'w', newline='', encoding='utf-8') as f:
+                    writer = csv.writer(f)
+                    writer.writerow(['Name', 'Date', 'Time', 'Status'])
+            except IOError as e:
+                logger.error(f"Error initializing CSV file: {e}")
     
-    def mark_attendance(self, name, status="Present"):
+    def mark_attendance(self, name: str, status: str = "Present") -> bool:
         """
         Mark attendance for a person.
         
@@ -74,15 +95,19 @@ class AttendanceSystem(FaceRecognitionSystem):
         
         now = datetime.now()
         date = now.strftime("%Y-%m-%d")
-        time = now.strftime("%H:%M:%S")
+        time_str = now.strftime("%H:%M:%S")
         
-        with open(self.attendance_file, 'a', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerow([name, date, time, status])
-        
-        self.today_attendance.add(name)
-        print(f"✓ Attendance marked for {name} at {time}")
-        return True
+        try:
+            with open(self.attendance_file, 'a', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow([name, date, time_str, status])
+            
+            self.today_attendance.add(name)
+            logger.info(f"Attendance marked for {name} at {time_str} - {status}")
+            return True
+        except IOError as e:
+            logger.error(f"Error marking attendance: {e}")
+            return False
     
     def run_attendance_camera(self, tolerance=0.6, scale=0.25, 
                                late_time=None, end_time=None):
