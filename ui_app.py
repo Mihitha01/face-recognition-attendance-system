@@ -32,58 +32,49 @@ class FaceRecognitionApp(ctk.CTk):
     
     def __init__(self):
         super().__init__()
-        
         # Window configuration
         self.title("Face Recognition System")
-        self.geometry("1200x700")
-        self.minsize(1000, 600)
-        
+        self.geometry("1400x900")
+        self.minsize(1200, 700)
+        self.configure(bg="#181A20")
         # Initialize systems
         self.face_system = FaceRecognitionSystem()
         self.attendance_system = AttendanceSystem()
-        
         # Video capture variables
         self.cap: Optional[cv2.VideoCapture] = None
         self.is_camera_running = False
         self.current_mode = None
         self.register_name = ""
         self.camera_index = 0
-        
         # Frame queue for thread-safe communication
         self.frame_queue = queue.Queue(maxsize=2)
         self.result_queue = queue.Queue(maxsize=10)
-        
         # Current preview label reference
         self.current_preview_label = None
-        
         # Create UI
         self._create_sidebar()
         self._create_main_content()
         self._create_status_bar()
-        
         # Show home page by default
         self._show_home()
-        
         # Start UI update loop
         self._schedule_ui_update()
-        
         # Bind close event
         self.protocol("WM_DELETE_WINDOW", self._on_closing)
     
     def _create_sidebar(self):
         """Create the sidebar with navigation buttons."""
-        self.sidebar = ctk.CTkFrame(self, width=200, corner_radius=0)
+        self.sidebar = ctk.CTkFrame(self, width=220, corner_radius=20, fg_color="#23272F")
         self.sidebar.pack(side="left", fill="y", padx=0, pady=0)
         self.sidebar.pack_propagate(False)
-        
         # Logo/Title
         self.logo_label = ctk.CTkLabel(
-            self.sidebar, 
+            self.sidebar,
             text="🎭 Face\nRecognition",
-            font=ctk.CTkFont(size=24, weight="bold")
+            font=ctk.CTkFont(size=28, weight="bold"),
+            text_color="#00BFFF"
         )
-        self.logo_label.pack(pady=(30, 40))
-        
+        self.logo_label.pack(pady=(40, 50))
         # Navigation buttons
         nav_buttons = [
             ("🏠 Home", self._show_home),
@@ -93,54 +84,56 @@ class FaceRecognitionApp(ctk.CTk):
             ("👥 Database", self._show_database),
             ("⚙️ Settings", self._show_settings),
         ]
-        
         for text, cmd in nav_buttons:
             btn = ctk.CTkButton(
                 self.sidebar,
                 text=text,
-                font=ctk.CTkFont(size=14),
-                height=40,
+                font=ctk.CTkFont(size=16, weight="bold"),
+                height=48,
+                corner_radius=12,
+                fg_color="#00BFFF",
+                text_color="#181A20",
+                hover_color="#009ACD",
                 command=cmd
             )
-            btn.pack(pady=5, padx=20, fill="x")
-        
+            btn.pack(pady=8, padx=24, fill="x")
         # Appearance mode toggle at bottom
         ctk.CTkLabel(
             self.sidebar,
             text="Appearance:",
-            font=ctk.CTkFont(size=12)
+            font=ctk.CTkFont(size=13),
+            text_color="#B0B3B8"
         ).pack(side="bottom", pady=(0, 5))
-        
         self.appearance_menu = ctk.CTkOptionMenu(
             self.sidebar,
             values=["Dark", "Light", "System"],
             command=self._change_appearance
         )
-        self.appearance_menu.pack(side="bottom", pady=(0, 10), padx=20)
+        self.appearance_menu.pack(side="bottom", pady=(0, 14), padx=24)
     
     def _create_main_content(self):
         """Create the main content area."""
-        self.main_frame = ctk.CTkFrame(self, corner_radius=0)
+        self.main_frame = ctk.CTkFrame(self, corner_radius=20, fg_color="#181A20")
         self.main_frame.pack(side="left", fill="both", expand=True, padx=0, pady=0)
     
     def _create_status_bar(self):
         """Create the status bar at the bottom."""
-        self.status_bar = ctk.CTkFrame(self.main_frame, height=30, corner_radius=0)
+        self.status_bar = ctk.CTkFrame(self.main_frame, height=36, corner_radius=12, fg_color="#23272F")
         self.status_bar.pack(side="bottom", fill="x")
-        
         self.status_label = ctk.CTkLabel(
             self.status_bar,
             text="Ready",
-            font=ctk.CTkFont(size=12)
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color="#00BFFF"
         )
-        self.status_label.pack(side="left", padx=10)
-        
+        self.status_label.pack(side="left", padx=18)
         self.faces_count_label = ctk.CTkLabel(
             self.status_bar,
             text=f"Registered Faces: {len(self.face_system.known_face_names)}",
-            font=ctk.CTkFont(size=12)
+            font=ctk.CTkFont(size=14),
+            text_color="#B0B3B8"
         )
-        self.faces_count_label.pack(side="right", padx=10)
+        self.faces_count_label.pack(side="right", padx=18)
     
     def _clear_main_frame(self):
         """Clear all widgets from the main content area except status bar."""
@@ -286,7 +279,7 @@ class FaceRecognitionApp(ctk.CTk):
         
         ctk.CTkLabel(preview_frame, text="Preview", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=10)
         
-        self.register_preview = ctk.CTkLabel(preview_frame, text="Click 'Start Camera' to begin", width=480, height=360)
+        self.register_preview = ctk.CTkLabel(preview_frame, text="Click 'Start Camera' to begin", width=800, height=600)
         self.register_preview.pack(padx=20, pady=10)
         
         cam_controls = ctk.CTkFrame(preview_frame, fg_color="transparent")
@@ -368,7 +361,7 @@ class FaceRecognitionApp(ctk.CTk):
         
         ctk.CTkLabel(content, text="Face Recognition", font=ctk.CTkFont(size=24, weight="bold")).pack(pady=(10, 20))
         
-        self.recognize_preview = ctk.CTkLabel(content, text="Click 'Start Recognition' to begin", width=640, height=480)
+        self.recognize_preview = ctk.CTkLabel(content, text="Click 'Start Recognition' to begin", width=800, height=600)
         self.recognize_preview.pack(pady=10)
         
         controls = ctk.CTkFrame(content, fg_color="transparent")
@@ -427,7 +420,7 @@ class FaceRecognitionApp(ctk.CTk):
         cam_frame = ctk.CTkFrame(columns)
         cam_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
         
-        self.attendance_preview = ctk.CTkLabel(cam_frame, text="Click 'Start' to begin", width=480, height=360)
+        self.attendance_preview = ctk.CTkLabel(cam_frame, text="Click 'Start' to begin", width=800, height=600)
         self.attendance_preview.pack(padx=20, pady=20)
         
         cam_controls = ctk.CTkFrame(cam_frame, fg_color="transparent")
@@ -769,14 +762,12 @@ class FaceRecognitionApp(ctk.CTk):
         try:
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             h, w = frame_rgb.shape[:2]
-            max_w, max_h = 480, 360
+            max_w, max_h = 800, 600
             scale = min(max_w / w, max_h / h)
             new_w, new_h = int(w * scale), int(h * scale)
             frame_resized = cv2.resize(frame_rgb, (new_w, new_h))
-            
             pil_image = Image.fromarray(frame_resized)
             ctk_image = ctk.CTkImage(pil_image, size=(new_w, new_h))
-            
             label.configure(image=ctk_image, text="")
             label.image = ctk_image
         except:
