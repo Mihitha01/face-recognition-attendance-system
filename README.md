@@ -2,7 +2,21 @@
 
 A complete face recognition system built with Python, featuring real-time face detection and recognition, face registration, and an attendance tracking system.
 
-## Features
+## 🆕 **NEW: Advanced v2.0 Available!**
+
+Check out the **[Advanced Version](README_ADVANCED.md)** with cutting-edge features:
+- 🎯 Multi-model detection (MTCNN, RetinaFace, MediaPipe)
+- 🔒 Liveness detection (anti-spoofing)
+- 😊 Emotion recognition (7 emotions)
+- 📊 Advanced analytics with charts
+- 💾 Database backup & export (JSON, SQLite)
+- 🔔 Smart notifications (toast, sound, email)
+
+**Quick Start**: `python advanced_ui_app.py` | **[Full Documentation](README_ADVANCED.md)** | **[Quick Guide](QUICKSTART.md)**
+
+---
+
+## Features (Original v1.0)
 
 - **Face Detection**: Detect faces in images and video streams
 - **Face Registration**: Register new faces from webcam or image files
