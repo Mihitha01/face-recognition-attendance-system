@@ -68,6 +68,7 @@ class AdvancedFaceRecognitionApp(ctk.CTk):
         self.use_emotion_recognition = True
         self.use_quality_check = True
         self.detection_backend = "mediapipe"
+        self.performance_mode = True  # Enable performance optimizations
         
         # Video capture variables
         self.cap: Optional[cv2.VideoCapture] = None
@@ -580,55 +581,655 @@ class AdvancedFaceRecognitionApp(ctk.CTk):
                     self.face_system.load_encodings()  # Reload
                     self.notification_manager.show_toast("Success", "Restore complete", "success")
     
-    # Implement remaining pages from original ui_app.py...
-    # (Register, Recognize, Attendance, Database, Settings pages with enhancements)
-    
+    # ==================== ENHANCED PAGES ====================
     def _show_register(self):
-        """Enhanced registration page."""
-        # TODO: Implement with quality check and liveness detection
-        pass
+        """Enhanced registration page with quality check."""
+        self._clear_main_frame()
+        self._update_status("Face Registration", "📝")
+        
+        content = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        content.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        ctk.CTkLabel(content, text="Register New Face", font=ctk.CTkFont(size=24, weight="bold"), text_color="#00d4ff").pack(pady=(10, 20))
+        
+        # Two-column layout
+        columns = ctk.CTkFrame(content, fg_color="transparent")
+        columns.pack(fill="both", expand=True)
+        columns.grid_columnconfigure(0, weight=1)
+        columns.grid_columnconfigure(1, weight=1)
+        
+        # Left: Camera preview
+        preview_frame = ctk.CTkFrame(columns, fg_color="#1a1a2e")
+        preview_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
+        
+        ctk.CTkLabel(preview_frame, text="Preview", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=10)
+        
+        self.register_preview = ctk.CTkLabel(preview_frame, text="Click 'Start Camera' to begin", width=600, height=450)
+        self.register_preview.pack(padx=20, pady=10)
+        
+        cam_controls = ctk.CTkFrame(preview_frame, fg_color="transparent")
+        cam_controls.pack(pady=10)
+        
+        self.btn_start_register = ctk.CTkButton(cam_controls, text="📷 Start Camera", command=lambda: self._start_camera('register'))
+        self.btn_start_register.pack(side="left", padx=5)
+        
+        self.btn_stop_register = ctk.CTkButton(cam_controls, text="⏹ Stop", command=self._stop_camera, state="disabled")
+        self.btn_stop_register.pack(side="left", padx=5)
+        
+        # Right: Registration form
+        form_frame = ctk.CTkFrame(columns, fg_color="#1a1a2e")
+        form_frame.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
+        
+        ctk.CTkLabel(form_frame, text="Registration Details", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=10)
+        
+        ctk.CTkLabel(form_frame, text="Person's Name:").pack(pady=(20, 5))
+        self.name_entry = ctk.CTkEntry(form_frame, width=250, placeholder_text="Enter name")
+        self.name_entry.pack(pady=5)
+        
+        ctk.CTkLabel(form_frame, text="Registration Method:", font=ctk.CTkFont(size=14)).pack(pady=(30, 10))
+        
+        ctk.CTkButton(form_frame, text="📸 Capture from Camera", width=250, command=self._capture_face, fg_color="#00d4ff", text_color="#000000").pack(pady=10)
+        ctk.CTkButton(form_frame, text="📁 Upload Image", width=250, command=self._upload_image_for_registration, fg_color="#00d4ff", text_color="#000000").pack(pady=10)
+        ctk.CTkButton(form_frame, text="📂 Batch Register", width=250, command=self._batch_register, fg_color="#00d4ff", text_color="#000000").pack(pady=10)
+    
+    def _capture_face(self):
+        """Capture face from camera for registration."""
+        name = self.name_entry.get().strip()
+        if not name:
+            messagebox.showwarning("Warning", "Please enter a name first!")
+            return
+        if not self.is_camera_running:
+            messagebox.showwarning("Warning", "Please start the camera first!")
+            return
+        self.register_name = name
+        self._update_status(f"Capturing face for: {name}", "📸")
+    
+    def _upload_image_for_registration(self):
+        """Upload an image for face registration."""
+        name = self.name_entry.get().strip()
+        if not name:
+            messagebox.showwarning("Warning", "Please enter a name first!")
+            return
+        
+        file_path = filedialog.askopenfilename(
+            title="Select Image",
+            filetypes=[("Image files", "*.jpg *.jpeg *.png *.bmp *.gif *.webp"), ("All files", "*.*")]
+        )
+        
+        if file_path:
+            if self.face_system.register_face_from_image(file_path, name):
+                messagebox.showinfo("Success", f"Successfully registered {name}!")
+                self.notification_manager.show_toast("Success", f"Registered {name}", "success")
+                self._update_status(f"Registered: {name}", "✅")
+            else:
+                messagebox.showerror("Error", "Failed to register. No face detected.")
+    
+    def _batch_register(self):
+        """Batch register faces from a folder."""
+        folder_path = filedialog.askdirectory(title="Select Folder with Person Subfolders")
+        
+        if folder_path:
+            from register_faces_from_folder import register_faces_from_folder
+            stats = register_faces_from_folder(folder_path, self.face_system)
+            
+            if stats:
+                messagebox.showinfo("Complete", f"Processed: {stats['total_images']}\nSuccessful: {stats['successful']}\nFailed: {stats['failed']}")
+                self._update_status(f"Batch registered {stats['successful']} faces", "✅")
     
     def _show_recognize(self):
-        """Enhanced recognition page."""
-        # TODO: Implement with emotion recognition
-        pass
+        """Enhanced recognition page with emotion detection."""
+        self._clear_main_frame()
+        self._update_status("Face Recognition", "🔍")
+        
+        content = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        content.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        ctk.CTkLabel(content, text="Face Recognition", font=ctk.CTkFont(size=24, weight="bold"), text_color="#00d4ff").pack(pady=(10, 20))
+        
+        self.recognize_preview = ctk.CTkLabel(content, text="Click 'Start Recognition' to begin", width=800, height=600, fg_color="#1a1a2e")
+        self.recognize_preview.pack(pady=10)
+        
+        controls = ctk.CTkFrame(content, fg_color="transparent")
+        controls.pack(pady=10)
+        
+        self.btn_start_recognize = ctk.CTkButton(controls, text="📷 Start Recognition", command=lambda: self._start_camera('recognize'), fg_color="#00d4ff", text_color="#000000")
+        self.btn_start_recognize.pack(side="left", padx=10)
+        
+        self.btn_stop_recognize = ctk.CTkButton(controls, text="⏹ Stop", command=self._stop_camera, state="disabled")
+        self.btn_stop_recognize.pack(side="left", padx=10)
+        
+        ctk.CTkButton(controls, text="📁 From Image", command=self._recognize_from_image).pack(side="left", padx=10)
+    
+    def _recognize_from_image(self):
+        """Recognize faces from an uploaded image."""
+        file_path = filedialog.askopenfilename(
+            title="Select Image",
+            filetypes=[("Image files", "*.jpg *.jpeg *.png *.bmp *.gif *.webp"), ("All files", "*.*")]
+        )
+        
+        if file_path:
+            results = self.face_system.recognize_face_in_image(file_path)
+            
+            if results:
+                names = [name for name, _ in results]
+                self._update_status(f"Detected: {', '.join(names)}", "✅")
+                
+                image = cv2.imread(file_path)
+                for name, (top, right, bottom, left) in results:
+                    color = (0, 255, 0) if name != "Unknown" else (0, 0, 255)
+                    cv2.rectangle(image, (left, top), (right, bottom), color, 2)
+                    cv2.putText(image, name, (left, top - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
+                
+                if hasattr(self, 'recognize_preview'):
+                    self._display_image(image, self.recognize_preview)
+            else:
+                self._update_status("No faces detected", "⚠️")
     
     def _show_attendance(self):
-        """Enhanced attendance page."""
-        # TODO: Implement with notifications
-        pass
+        """Enhanced attendance tracking page."""
+        self._clear_main_frame()
+        self._update_status("Attendance System", "📋")
+        
+        content = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        content.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        ctk.CTkLabel(content, text="Attendance Tracking", font=ctk.CTkFont(size=24, weight="bold"), text_color="#00d4ff").pack(pady=(10, 20))
+        
+        columns = ctk.CTkFrame(content, fg_color="transparent")
+        columns.pack(fill="both", expand=True)
+        columns.grid_columnconfigure(0, weight=1)
+        columns.grid_columnconfigure(1, weight=1)
+        
+        # Left: Camera
+        cam_frame = ctk.CTkFrame(columns, fg_color="#1a1a2e")
+        cam_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
+        
+        self.attendance_preview = ctk.CTkLabel(cam_frame, text="Click 'Start' to begin", width=600, height=450)
+        self.attendance_preview.pack(padx=20, pady=20)
+        
+        cam_controls = ctk.CTkFrame(cam_frame, fg_color="transparent")
+        cam_controls.pack(pady=10)
+        
+        self.btn_start_attendance = ctk.CTkButton(cam_controls, text="▶ Start", command=lambda: self._start_camera('attendance'), fg_color="#00d4ff", text_color="#000000")
+        self.btn_start_attendance.pack(side="left", padx=5)
+        
+        self.btn_stop_attendance = ctk.CTkButton(cam_controls, text="⏹ Stop", command=self._stop_camera, state="disabled")
+        self.btn_stop_attendance.pack(side="left", padx=5)
+        
+        # Right: Attendance log
+        log_frame = ctk.CTkFrame(columns, fg_color="#1a1a2e")
+        log_frame.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
+        
+        ctk.CTkLabel(log_frame, text="Today's Attendance", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=10)
+        
+        self.attendance_log = ctk.CTkTextbox(log_frame, width=350, height=300)
+        self.attendance_log.pack(padx=20, pady=10)
+        self._refresh_attendance_log()
+        
+        btn_frame = ctk.CTkFrame(log_frame, fg_color="transparent")
+        btn_frame.pack(pady=10)
+        
+        ctk.CTkButton(btn_frame, text="🔄 Refresh", command=self._refresh_attendance_log).pack(side="left", padx=5)
+        ctk.CTkButton(btn_frame, text="📁 Export", command=self._export_attendance).pack(side="left", padx=5)
+    
+    def _refresh_attendance_log(self):
+        """Refresh the attendance log display."""
+        try:
+            if not hasattr(self, 'attendance_log'):
+                return
+            
+            self.attendance_log.delete("1.0", "end")
+            today = datetime.now().strftime("%Y-%m-%d")
+            attendance_file = Path("attendance.csv")
+            
+            if attendance_file.exists():
+                with open(attendance_file, 'r', newline='', encoding='utf-8') as f:
+                    reader = csv.reader(f)
+                    next(reader, None)
+                    for row in reader:
+                        if len(row) >= 4 and row[1] == today:
+                            self.attendance_log.insert("end", f"{row[2]} - {row[0]} ({row[3]})\n")
+            
+            if self.attendance_log.get("1.0", "end").strip() == "":
+                self.attendance_log.insert("end", "No attendance records for today")
+        except Exception as e:
+            print(f"Error: {e}")
+    
+    def _export_attendance(self):
+        """Export attendance to CSV."""
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv")],
+            initialfile=f"attendance_{datetime.now().strftime('%Y%m%d')}.csv"
+        )
+        if file_path and Path("attendance.csv").exists():
+            import shutil
+            shutil.copy("attendance.csv", file_path)
+            messagebox.showinfo("Export Complete", f"Exported to:\n{file_path}")
     
     def _show_database(self):
-        """Enhanced database page."""
-        # TODO: Implement from original with export options
-        pass
+        """Enhanced database management page."""
+        self._clear_main_frame()
+        self._update_status("Database Management", "👥")
+        
+        content = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        content.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        ctk.CTkLabel(content, text="Registered Faces Database", font=ctk.CTkFont(size=24, weight="bold"), text_color="#00d4ff").pack(pady=(10, 20))
+        
+        # Stats
+        unique_names = list(set(self.face_system.known_face_names))
+        ctk.CTkLabel(
+            content,
+            text=f"Total: {len(self.face_system.known_face_names)} encodings | {len(unique_names)} unique persons",
+            font=ctk.CTkFont(size=14)
+        ).pack(pady=10)
+        
+        # List of persons
+        scroll_frame = ctk.CTkScrollableFrame(content, width=600, height=400, fg_color="#1a1a2e")
+        scroll_frame.pack(padx=20, pady=10)
+        
+        from collections import Counter
+        name_counts = Counter(self.face_system.known_face_names)
+        
+        for name, count in sorted(name_counts.items()):
+            person_frame = ctk.CTkFrame(scroll_frame, fg_color="#16213e")
+            person_frame.pack(fill="x", pady=2, padx=5)
+            
+            ctk.CTkLabel(person_frame, text=f"👤 {name} ({count})", font=ctk.CTkFont(size=14)).pack(side="left", padx=10, pady=5)
+            ctk.CTkButton(person_frame, text="🗑", width=30, fg_color="red", hover_color="darkred",
+                         command=lambda n=name: self._delete_person(n)).pack(side="right", padx=10, pady=5)
+        
+        if not name_counts:
+            ctk.CTkLabel(scroll_frame, text="No faces registered yet", font=ctk.CTkFont(size=14)).pack(pady=20)
+        
+        # Buttons
+        btn_frame = ctk.CTkFrame(content, fg_color="transparent")
+        btn_frame.pack(pady=20)
+        
+        ctk.CTkButton(btn_frame, text="🗑 Clear All", fg_color="red", hover_color="darkred", command=self._clear_database).pack(side="left", padx=10)
+        ctk.CTkButton(btn_frame, text="🔄 Refresh", command=self._show_database, fg_color="#00d4ff", text_color="#000000").pack(side="left", padx=10)
+    
+    def _delete_person(self, name: str):
+        """Delete a person from the database."""
+        if messagebox.askyesno("Confirm", f"Delete all encodings for '{name}'?"):
+            indices = [i for i, n in enumerate(self.face_system.known_face_names) if n == name]
+            for i in sorted(indices, reverse=True):
+                del self.face_system.known_face_encodings[i]
+                del self.face_system.known_face_names[i]
+            self.face_system.save_encodings()
+            self.notification_manager.show_toast("Success", f"Deleted {name}", "success")
+            self._show_database()
+    
+    def _clear_database(self):
+        """Clear all face encodings."""
+        if messagebox.askyesno("Confirm", "Delete ALL registered faces?"):
+            self.face_system.known_face_encodings = []
+            self.face_system.known_face_names = []
+            self.face_system.save_encodings()
+            self._show_database()
     
     def _show_settings(self):
         """Enhanced settings page."""
-        # TODO: Implement with all new feature toggles
-        pass
+        self._clear_main_frame()
+        self._update_status("Settings", "⚙️")
+        
+        content = ctk.CTkScrollableFrame(self.main_frame, fg_color="transparent")
+        content.pack(fill="both", expand=True, padx=40, pady=40)
+        
+        ctk.CTkLabel(content, text="Settings", font=ctk.CTkFont(size=24, weight="bold"), text_color="#00d4ff").pack(pady=(10, 30))
+        
+        # Camera settings
+        cam_frame = ctk.CTkFrame(content, fg_color="#1a1a2e")
+        cam_frame.pack(fill="x", padx=50, pady=10)
+        
+        ctk.CTkLabel(cam_frame, text="Camera Settings", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=15)
+        ctk.CTkLabel(cam_frame, text="Camera Index:", font=ctk.CTkFont(size=14)).pack(pady=(10, 5))
+        self.camera_entry = ctk.CTkEntry(cam_frame, width=100)
+        self.camera_entry.insert(0, str(self.camera_index))
+        self.camera_entry.pack(pady=(5, 20))
+        
+        # Feature toggles
+        features_frame = ctk.CTkFrame(content, fg_color="#1a1a2e")
+        features_frame.pack(fill="x", padx=50, pady=10)
+        
+        ctk.CTkLabel(features_frame, text="Advanced Features", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=15)
+        
+        self.use_emotion_var = ctk.BooleanVar(value=self.use_emotion_recognition)
+        ctk.CTkCheckBox(features_frame, text="Enable Emotion Recognition", variable=self.use_emotion_var).pack(pady=5)
+        
+        self.use_quality_var = ctk.BooleanVar(value=self.use_quality_check)
+        ctk.CTkCheckBox(features_frame, text="Enable Quality Check", variable=self.use_quality_var).pack(pady=5)
+        
+        self.performance_mode_var = ctk.BooleanVar(value=self.performance_mode)
+        ctk.CTkCheckBox(features_frame, text="Performance Mode (Faster Processing)", variable=self.performance_mode_var).pack(pady=5)
+        
+        self.notifications_var = ctk.BooleanVar(value=self.notification_manager.toast_enabled)
+        ctk.CTkCheckBox(features_frame, text="Enable Notifications", variable=self.notifications_var).pack(pady=(5, 20))
+        
+        ctk.CTkButton(content, text="Save Settings", command=self._save_settings, fg_color="#00d4ff", text_color="#000000", height=40).pack(pady=20)
+        
+        # About
+        about_frame = ctk.CTkFrame(content, fg_color="#1a1a2e")
+        about_frame.pack(fill="x", padx=50, pady=20)
+        
+        ctk.CTkLabel(about_frame, text="About", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=10)
+        ctk.CTkLabel(about_frame, text="Advanced Face Recognition System v2.0\nWith Emotion Recognition & Advanced Analytics\nBuilt with Python, OpenCV & AI",
+                    font=ctk.CTkFont(size=12), justify="center").pack(pady=(0, 20))
+    
+    def _save_settings(self):
+        """Save settings."""
+        try:
+            self.camera_index = int(self.camera_entry.get())
+            self.use_emotion_recognition = self.use_emotion_var.get()
+            self.use_quality_check = self.use_quality_var.get()
+            self.performance_mode = self.performance_mode_var.get()
+            self.notification_manager.toast_enabled = self.notifications_var.get()
+            messagebox.showinfo("Settings", "Settings saved successfully!")
+            self._update_status("Settings saved", "✅")
+        except ValueError:
+            messagebox.showerror("Error", "Invalid camera index")
     
     def _schedule_ui_update(self):
-        """Schedule UI update loop."""
+        """Schedule UI update loop at 30 FPS."""
         self._update_ui()
-        self.after(33, self._schedule_ui_update)
+        self.after(33, self._schedule_ui_update)  # ~30 FPS
     
     def _update_ui(self):
         """Update UI with camera frames."""
-        # Similar to original implementation
-        pass
+        try:
+            while not self.frame_queue.empty():
+                try:
+                    frame = self.frame_queue.get_nowait()
+                    if frame is not None and self.current_preview_label is not None:
+                        try:
+                            if self.current_preview_label.winfo_exists():
+                                self._display_image(frame, self.current_preview_label)
+                        except Exception:
+                            pass
+                except queue.Empty:
+                    break
+            
+            while not self.result_queue.empty():
+                try:
+                    result = self.result_queue.get_nowait()
+                    if result:
+                        action, data = result
+                        self._handle_result(action, data)
+                except queue.Empty:
+                    break
+        except Exception as e:
+            print(f"UI update error: {e}")
+    
+    def _handle_result(self, action: str, data):
+        """Handle results from camera thread."""
+        try:
+            if action == "register_success":
+                self._update_status(f"✅ Registered: {data}", "✅")
+                self.notification_manager.show_toast("Success", f"Registered {data}", "success")
+                messagebox.showinfo("Success", f"Successfully registered {data}!")
+            elif action == "register_no_face":
+                self._update_status("❌ No face detected", "⚠️")
+            elif action == "register_multiple_faces":
+                self._update_status("❌ Multiple faces - show only one", "⚠️")
+            elif action == "attendance_marked":
+                self._update_status(f"✅ Attendance marked: {data}", "✅")
+                self.notification_manager.show_toast("Attendance", f"{data} checked in", "success")
+                self._refresh_attendance_log()
+        except Exception as e:
+            print(f"Handle result error: {e}")
+    
+    def _display_image(self, frame, label):
+        """Display an OpenCV image on a CTk label."""
+        try:
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            h, w = frame_rgb.shape[:2]
+            max_w, max_h = 800, 600
+            scale = min(max_w / w, max_h / h)
+            new_w, new_h = int(w * scale), int(h * scale)
+            frame_resized = cv2.resize(frame_rgb, (new_w, new_h))
+            pil_image = Image.fromarray(frame_resized)
+            ctk_image = ctk.CTkImage(pil_image, size=(new_w, new_h))
+            label.configure(image=ctk_image, text="")
+            label.image = ctk_image
+        except:
+            pass
     
     def _start_camera(self, mode: str):
-        """Start camera with advanced features."""
-        # Enhanced version with new detectors
-        pass
+        """Start camera for a specific mode."""
+        if self.is_camera_running:
+            return
+        
+        self.cap = cv2.VideoCapture(self.camera_index)
+        
+        if not self.cap.isOpened():
+            messagebox.showerror("Error", "Could not open camera")
+            return
+        
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        self.cap.set(cv2.CAP_PROP_FPS, 30)  # Set to 30 FPS
+        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce buffer for lower latency
+        
+        self.is_camera_running = True
+        self.current_mode = mode
+        
+        # Set current preview label based on mode
+        if mode == 'register' and hasattr(self, 'register_preview'):
+            self.current_preview_label = self.register_preview
+            self.btn_start_register.configure(state="disabled")
+            self.btn_stop_register.configure(state="normal")
+        elif mode == 'recognize' and hasattr(self, 'recognize_preview'):
+            self.current_preview_label = self.recognize_preview
+            self.btn_start_recognize.configure(state="disabled")
+            self.btn_stop_recognize.configure(state="normal")
+        elif mode == 'attendance' and hasattr(self, 'attendance_preview'):
+            self.current_preview_label = self.attendance_preview
+            self.btn_start_attendance.configure(state="disabled")
+            self.btn_stop_attendance.configure(state="normal")
+        
+        # Clear queues
+        while not self.frame_queue.empty():
+            try:
+                self.frame_queue.get_nowait()
+            except queue.Empty:
+                break
+        
+        # Start camera thread
+        threading.Thread(target=self._camera_loop, daemon=True).start()
+    
+    def _camera_loop(self):
+        """Main camera loop with optimized performance."""
+        import face_recognition
+        
+        frame_count = 0
+        process_count = 0
+        face_locations = []
+        face_names = []
+        face_emotions = []  # Track emotions
+        
+        # Performance optimization: process every Nth frame
+        PROCESS_EVERY_N_FRAMES = 3  # Process every 3rd frame (faster)
+        
+        while self.is_camera_running and self.cap and self.cap.isOpened():
+            try:
+                ret, frame = self.cap.read()
+                if not ret:
+                    time.sleep(0.01)
+                    continue
+                
+                display_frame = frame.copy()
+                frame_count += 1
+                
+                if self.current_mode in ['recognize', 'attendance']:
+                    # Only process every Nth frame for performance
+                    if frame_count % PROCESS_EVERY_N_FRAMES == 0:
+                        process_count += 1
+                        
+                        # Resize once and reuse
+                        small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
+                        rgb_small = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+                        
+                        # Face detection with HOG (faster)
+                        face_locations = face_recognition.face_locations(rgb_small, model="hog")
+                        
+                        if face_locations:
+                            face_encodings = face_recognition.face_encodings(rgb_small, face_locations)
+                            face_names = []
+                            face_emotions = []
+                            
+                            for i, encoding in enumerate(face_encodings):
+                                name = self.face_system._match_face(encoding, 0.6)
+                                face_names.append(name)
+                                
+                                # EMOTION RECOGNITION - Now working!
+                                if self.use_emotion_recognition and process_count % 2 == 0:  # Every 6th frame
+                                    try:
+                                        top, right, bottom, left = face_locations[i]
+                                        # Scale back to original size
+                                        face_roi = frame[top*4:bottom*4, left*4:right*4]
+                                        if face_roi.size > 0:
+                                            emotion = self.emotion_recognizer.predict_emotion(face_roi)
+                                            if emotion:
+                                                face_emotions.append(emotion)
+                                                # Track emotion for this person
+                                                if name != "Unknown":
+                                                    self.emotion_tracker.add_emotion(name, emotion)
+                                            else:
+                                                face_emotions.append("Neutral")
+                                        else:
+                                            face_emotions.append("Neutral")
+                                    except Exception as e:
+                                        face_emotions.append("Neutral")
+                                else:
+                                    face_emotions.append("")
+                                
+                                # Mark attendance
+                                if self.current_mode == 'attendance' and name != "Unknown":
+                                    if self.attendance_system.mark_attendance(name):
+                                        try:
+                                            self.result_queue.put_nowait(("attendance_marked", name))
+                                        except queue.Full:
+                                            pass
+                        else:
+                            face_names = []
+                            face_emotions = []
+                    
+                    # Draw boxes with emotions
+                    for idx, ((top, right, bottom, left), name) in enumerate(zip(face_locations, face_names)):
+                        top, right, bottom, left = top*4, right*4, bottom*4, left*4
+                        color = (0, 255, 0) if name != "Unknown" else (0, 0, 255)
+                        
+                        # Draw face box
+                        cv2.rectangle(display_frame, (left, top), (right, bottom), color, 2)
+                        
+                        # Emotion text (if available)
+                        emotion_text = ""
+                        if idx < len(face_emotions) and face_emotions[idx]:
+                            emotion = face_emotions[idx]
+                            # Emoji mapping
+                            emoji_map = {
+                                "Happy": "😊", "Sad": "😢", "Angry": "😠",
+                                "Surprise": "😮", "Fear": "😨", "Disgust": "🤢",
+                                "Neutral": "😐"
+                            }
+                            emoji = emoji_map.get(emotion, "")
+                            emotion_text = f" {emoji} {emotion}"
+                        
+                        # Draw name and emotion label background
+                        label_height = 35 if not emotion_text else 60
+                        cv2.rectangle(display_frame, (left, bottom - label_height), (right, bottom), color, cv2.FILLED)
+                        
+                        # Draw name
+                        cv2.putText(display_frame, name, (left + 6, bottom - 36 if emotion_text else bottom - 6),
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                        
+                        # Draw emotion
+                        if emotion_text:
+                            cv2.putText(display_frame, emotion_text, (left + 6, bottom - 8),
+                                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                
+                elif self.current_mode == 'register':
+                    # Process less frequently in register mode
+                    if frame_count % PROCESS_EVERY_N_FRAMES == 0:
+                        small = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
+                        rgb_small = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
+                        face_locs = face_recognition.face_locations(rgb_small, model="hog")
+                        face_locations = [(t*2, r*2, b*2, l*2) for t, r, b, l in face_locs]
+                    
+                    for (top, right, bottom, left) in face_locations:
+                        cv2.rectangle(display_frame, (left, top), (right, bottom), (0, 255, 0), 2)
+                    
+                    cv2.putText(display_frame, "Enter name & click Capture", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                    
+                    if self.register_name:
+                        name = self.register_name
+                        self.register_name = ""
+                        
+                        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                        locs = face_recognition.face_locations(rgb_frame, model="hog")
+                        
+                        if len(locs) == 1:
+                            encodings = face_recognition.face_encodings(rgb_frame, locs)
+                            if encodings:
+                                self.face_system.known_face_encodings.append(encodings[0])
+                                self.face_system.known_face_names.append(name)
+                                self.face_system.save_encodings()
+                                try:
+                                    self.result_queue.put_nowait(("register_success", name))
+                                except queue.Full:
+                                    pass
+                        elif len(locs) == 0:
+                            try:
+                                self.result_queue.put_nowait(("register_no_face", None))
+                            except queue.Full:
+                                pass
+                        else:
+                            try:
+                                self.result_queue.put_nowait(("register_multiple_faces", None))
+                            except queue.Full:
+                                pass
+                
+                # Put frame in queue (non-blocking)
+                try:
+                    # Clear old frames if queue is full
+                    if self.frame_queue.full():
+                        try:
+                            self.frame_queue.get_nowait()
+                        except queue.Empty:
+                            pass
+                    self.frame_queue.put_nowait(display_frame)
+                except queue.Full:
+                    pass  # Skip frame if queue is full
+                
+                # Reduced sleep for smoother video (30 FPS target)
+                time.sleep(0.033)
+                
+            except Exception as e:
+                print(f"Camera error: {e}")
+                time.sleep(0.1)
     
     def _stop_camera(self):
-        """Stop camera."""
+        """Stop the camera."""
         self.is_camera_running = False
+        
         if self.cap:
+            time.sleep(0.2)
             self.cap.release()
             self.cap = None
+        
+        self.current_preview_label = None
+        
+        # Re-enable buttons
+        if hasattr(self, 'btn_start_register'):
+            self.btn_start_register.configure(state="normal")
+            self.btn_stop_register.configure(state="disabled")
+        if hasattr(self, 'btn_start_recognize'):
+            self.btn_start_recognize.configure(state="normal")
+            self.btn_stop_recognize.configure(state="disabled")
+        if hasattr(self, 'btn_start_attendance'):
+            self.btn_start_attendance.configure(state="normal")
+            self.btn_stop_attendance.configure(state="disabled")
     
     def _on_closing(self):
         """Handle window close event."""
