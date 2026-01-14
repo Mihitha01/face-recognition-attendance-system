@@ -7,7 +7,8 @@ Supports multiple emotions: happy, sad, angry, neutral, surprised, fearful, disg
 
 import cv2
 import numpy as np
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple, Optional, List
+from collections import deque
 import logging
 
 logger = logging.getLogger(__name__)
@@ -18,15 +19,18 @@ class EmotionRecognizer:
     
     EMOTIONS = ['angry', 'disgust', 'fear', 'happy', 'sad', 'surprise', 'neutral']
     
-    def __init__(self, model_type: str = "opencv"):
+    def __init__(self, model_type: str = "opencv", smoothing_window: int = 10):
         """
         Initialize emotion recognizer.
         
         Args:
             model_type: Type of model ('opencv', 'keras', 'fer')
+            smoothing_window: Number of frames to average for stable predictions
         """
         self.model_type = model_type.lower()
         self.model = None
+        self.smoothing_window = smoothing_window
+        self.emotion_buffer = deque(maxlen=smoothing_window)
         self._initialize_model()
     
     def _initialize_model(self):
@@ -46,8 +50,9 @@ class EmotionRecognizer:
         """Initialize FER (Facial Expression Recognition) library."""
         try:
             from fer import FER
-            self.model = FER(mtcnn=False)
-            logger.info("FER emotion detector initialized")
+            # Enable MTCNN for better face detection
+            self.model = FER(mtcnn=True)
+            logger.info("FER emotion detector initialized with MTCNN")
         except ImportError:
             logger.error("FER not installed. Install with: pip install fer")
             raise
@@ -69,6 +74,67 @@ class EmotionRecognizer:
         logger.info("Using basic emotion detection")
         # Placeholder for OpenCV-based emotion detection
         self.model = "opencv_basic"
+    
+    def _preprocess_face(self, face_img: np.ndarray) -> np.ndarray:
+        """
+        Preprocess face image for better emotion detection.
+        
+        Args:
+            face_img: Face image (BGR or RGB)
+            
+        Returns:
+            Preprocessed face image
+        """
+        # Resize to standard size (48x48 is common for emotion models)
+        target_size = (96, 96)  # Larger for better FER performance
+        face_resized = cv2.resize(face_img, target_size, interpolation=cv2.INTER_CUBIC)
+        
+        # Convert to grayscale for preprocessing
+        if len(face_resized.shape) == 3:
+            gray = cv2.cvtColor(face_resized, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = face_resized
+        
+        # Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4, 4))
+        enhanced = clahe.apply(gray)
+        
+        # Convert back to color if needed
+        if len(face_img.shape) == 3:
+            enhanced_color = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
+            return enhanced_color
+        
+        return enhanced
+    
+    def _smooth_emotions(self, current_emotions: Dict[str, float]) -> Dict[str, float]:
+        """
+        Apply temporal smoothing to emotion predictions.
+        
+        Args:
+            current_emotions: Current frame's emotion probabilities
+            
+        Returns:
+            Smoothed emotion probabilities
+        """
+        self.emotion_buffer.append(current_emotions)
+        
+        if len(self.emotion_buffer) == 0:
+            return current_emotions
+        
+        # Average emotions over the buffer
+        smoothed = {emotion: 0.0 for emotion in self.EMOTIONS}
+        
+        for emotions in self.emotion_buffer:
+            for emotion, score in emotions.items():
+                if emotion in smoothed:
+                    smoothed[emotion] += score
+        
+        # Normalize by buffer size
+        buffer_size = len(self.emotion_buffer)
+        for emotion in smoothed:
+            smoothed[emotion] /= buffer_size
+        
+        return smoothed
     
     def recognize_emotion(self, frame: np.ndarray, 
                          face_location: Optional[Tuple[int, int, int, int]] = None) -> Dict:
@@ -100,23 +166,45 @@ class EmotionRecognizer:
         # Convert BGR to RGB
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         
-        # If face location provided, crop to that region
+        # If face location provided, crop to that region with padding
         if face_location:
             top, right, bottom, left = face_location
+            # Add 20% padding around face for better context
+            height = bottom - top
+            width = right - left
+            pad_h = int(height * 0.2)
+            pad_w = int(width * 0.2)
+            
+            top = max(0, top - pad_h)
+            bottom = min(frame.shape[0], bottom + pad_h)
+            left = max(0, left - pad_w)
+            right = min(frame.shape[1], right + pad_w)
+            
             rgb_frame = rgb_frame[top:bottom, left:right]
         
-        # Detect emotions
-        result = self.model.detect_emotions(rgb_frame)
+        # Preprocess the face for better accuracy
+        processed_frame = self._preprocess_face(rgb_frame)
+        
+        # Detect emotions on preprocessed frame
+        result = self.model.detect_emotions(processed_frame)
         
         if result and len(result) > 0:
-            emotions = result[0]['emotions']
-            dominant_emotion = max(emotions, key=emotions.get)
+            # Get raw emotions
+            raw_emotions = result[0]['emotions']
+            
+            # Apply temporal smoothing
+            smoothed_emotions = self._smooth_emotions(raw_emotions)
+            
+            # Find dominant emotion from smoothed results
+            dominant_emotion = max(smoothed_emotions, key=smoothed_emotions.get)
+            confidence = smoothed_emotions[dominant_emotion]
             
             return {
-                'emotions': emotions,
+                'emotions': smoothed_emotions,
                 'dominant': dominant_emotion,
-                'confidence': emotions[dominant_emotion],
-                'detected': True
+                'confidence': confidence,
+                'detected': True,
+                'raw_emotions': raw_emotions  # Keep raw for debugging
             }
         
         return self._default_emotion_result()

@@ -67,11 +67,17 @@ EMOTION = {
     # Model type: 'fer', 'keras', 'opencv'
     'model_type': 'fer',
     
-    # Minimum confidence for emotion detection
-    'min_confidence': 0.3,
+    # Minimum confidence for emotion detection (increased for accuracy)
+    'min_confidence': 0.5,
     
-    # Number of frames to average for stable emotion
-    'smoothing_frames': 5,
+    # Number of frames to average for stable emotion (increased for smoothing)
+    'smoothing_frames': 10,
+    
+    # Face padding percentage (0.0 - 1.0) for better context
+    'face_padding': 0.2,
+    
+    # Enable preprocessing (CLAHE, normalization)
+    'enable_preprocessing': True,
 }
 
 # ==================== DATABASE & BACKUP ====================
